@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Shared.Data;
@@ -11,9 +12,11 @@ using Shared.Data;
 namespace Shared.Migrations
 {
     [DbContext(typeof(ScadaDbContext))]
-    partial class ScadaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612233607_AddSensorPublicKey")]
+    partial class AddSensorPublicKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

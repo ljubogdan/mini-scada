@@ -4,33 +4,44 @@ using Microsoft.EntityFrameworkCore;
 using Shared.Data;
 using Shared.DTOs;
 using Shared.Models;
+using Shared.Security;
 
 namespace IngestionService.Controllers;
 
 [ApiController]
 [Route("api/ingest")]
-public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger) : ControllerBase
+public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config) : ControllerBase
 {
     [HttpPost]
-    public async Task<IActionResult> Ingest([FromBody] SensorReadingDto dto)
+    public async Task<IActionResult> Ingest([FromBody] SecureMessageDto message)
     {
-        var sensor = await db.Sensors.FindAsync(dto.SensorId);
+        var sensor = await db.Sensors.FindAsync(message.SensorId);
         if (sensor is null)
             return NotFound("Sensor not found.");
 
         if (sensor.IsBlocked)
             return StatusCode(403, "Sensor is blocked.");
 
+        if (string.IsNullOrEmpty(sensor.PublicKey))
+            return BadRequest("Sensor has no public key.");
+
+        var isValid = CryptoService.RsaVerify(message.EncryptedPayload, message.Signature, sensor.PublicKey);
+        if (!isValid)
+            return StatusCode(401, "Invalid signature.");
+
+        var aesKey = Convert.FromBase64String(config["AesKey"]!);
+        var payload = CryptoService.AesDecrypt<SensorReadingPayload>(message.EncryptedPayload, message.IV, aesKey);
+
         sensor.LastSeenAt = DateTime.UtcNow;
 
-        var priority = CalculateAlarmPriority(sensor, dto.Value);
+        var priority = CalculateAlarmPriority(sensor, payload.Value);
 
         var measurement = new Measurement
         {
             Id = Guid.NewGuid(),
             SensorId = sensor.Id,
-            Value = dto.Value,
-            Timestamp = dto.Timestamp,
+            Value = payload.Value,
+            Timestamp = payload.Timestamp,
             Quality = sensor.Quality,
             AlarmPriority = priority,
             IsConsensus = false
@@ -44,17 +55,17 @@ public class IngestController(ScadaDbContext db, INotificationService notificati
             {
                 Id = Guid.NewGuid(),
                 SensorId = sensor.Id,
-                Value = dto.Value,
+                Value = payload.Value,
                 Priority = priority,
-                Timestamp = dto.Timestamp
+                Timestamp = payload.Timestamp
             });
 
-            await notifications.SendAlarmAsync(sensor.Id, dto.Value, priority);
+            await notifications.SendAlarmAsync(sensor.Id, payload.Value, priority);
         }
 
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Sensor={SensorId} Value={Value} Priority={Priority}", sensor.Id, dto.Value, priority);
+        logger.LogInformation("Sensor={SensorId} Value={Value} Priority={Priority}", sensor.Id, payload.Value, priority);
 
         return Ok();
     }

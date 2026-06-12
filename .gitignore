@@ -489,6 +489,7 @@ docker-compose.override.yml
 # App secrets
 appsettings.Local.json
 **/appsettings.*.local.json
+**/appsettings.Development.json
 secrets.json
 
 # JetBrains Rider

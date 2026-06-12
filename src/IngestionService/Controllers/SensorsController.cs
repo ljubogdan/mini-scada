@@ -27,7 +27,8 @@ public class SensorsController(ScadaDbContext db) : ControllerBase
             AlarmThreshold3 = dto.AlarmThreshold3,
             IsActive = true,
             IsBlocked = false,
-            LastSeenAt = DateTime.UtcNow
+            LastSeenAt = DateTime.UtcNow,
+            PublicKey = dto.PublicKey
         };
 
         db.Sensors.Add(sensor);
@@ -47,4 +48,5 @@ public class RegisterSensorDto
     public double? AlarmThreshold1 { get; set; }
     public double? AlarmThreshold2 { get; set; }
     public double? AlarmThreshold3 { get; set; }
+    public string? PublicKey { get; set; }
 }

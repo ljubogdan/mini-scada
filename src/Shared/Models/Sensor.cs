@@ -14,6 +14,7 @@ public class Sensor
     public bool IsBlocked { get; set; }
     public DateTime? BlockedUntil { get; set; }
     public DateTime? LastSeenAt { get; set; }
+    public string? PublicKey { get; set; }
 
     public ICollection<Measurement> Measurements { get; set; } = [];
     public ICollection<AlarmEvent> AlarmEvents { get; set; } = [];
