@@ -13,7 +13,12 @@ public class SensorsController(ScadaDbContext db) : ControllerBase
     {
         var existing = await db.Sensors.FindAsync(dto.Id);
         if (existing is not null)
+        {
+            existing.PublicKey = dto.PublicKey;
+            existing.LastSeenAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
             return Ok(existing.Id);
+        }
 
         var sensor = new Sensor
         {

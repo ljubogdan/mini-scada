@@ -1,19 +1,26 @@
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using SensorClient;
 using Shared.DTOs;
 using Shared.Models;
+using Shared.Security;
 
 var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json")
+    .AddJsonFile("appsettings.Development.json", optional: true)
     .Build();
 
 var serverUrl = config["ServerUrl"]!;
+var aesKey = Convert.FromBase64String(config["AesKey"]!);
 var sensorConfig = config.GetSection("Sensor").Get<SensorConfig>()!;
 
 var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
 var random = new Random();
 long messageId = 0;
+
+using var rsa = RSA.Create(2048);
+var publicKeyPem = rsa.ExportRSAPublicKeyPem();
 
 await RegisterSensor();
 
@@ -42,7 +49,8 @@ async Task RegisterSensor()
         Quality = Enum.Parse<DataQuality>(sensorConfig.Quality),
         sensorConfig.AlarmThreshold1,
         sensorConfig.AlarmThreshold2,
-        sensorConfig.AlarmThreshold3
+        sensorConfig.AlarmThreshold3,
+        PublicKey = publicKeyPem
     };
 
     var response = await http.PostAsJsonAsync("/api/sensors/register", payload);
@@ -52,17 +60,27 @@ async Task RegisterSensor()
 
 async Task SendReading(double value)
 {
-    var dto = new SensorReadingDto
+    var innerPayload = new SensorReadingPayload
     {
-        SensorId = sensorConfig.Id,
         Value = value,
         Timestamp = DateTime.UtcNow,
         MessageId = ++messageId
     };
 
+    var (cipherText, iv) = CryptoService.AesEncrypt(innerPayload, aesKey);
+    var signature = CryptoService.RsaSign(cipherText, rsa);
+
+    var message = new SecureMessageDto
+    {
+        SensorId = sensorConfig.Id,
+        EncryptedPayload = cipherText,
+        IV = iv,
+        Signature = signature
+    };
+
     try
     {
-        var response = await http.PostAsJsonAsync("/api/ingest", dto);
+        var response = await http.PostAsJsonAsync("/api/ingest", message);
         if (!response.IsSuccessStatusCode)
             Console.WriteLine($"Server returned: {response.StatusCode}");
     }
