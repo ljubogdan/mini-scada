@@ -1,4 +1,5 @@
 using IngestionService.Interfaces;
+using IngestionService.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Shared.Data;
@@ -10,7 +11,7 @@ namespace IngestionService.Controllers;
 
 [ApiController]
 [Route("api/ingest")]
-public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config) : ControllerBase
+public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config, AntiReplayService antiReplay) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Ingest([FromBody] SecureMessageDto message)
@@ -31,6 +32,9 @@ public class IngestController(ScadaDbContext db, INotificationService notificati
 
         var aesKey = Convert.FromBase64String(config["AesKey"]!);
         var payload = CryptoService.AesDecrypt<SensorReadingPayload>(message.EncryptedPayload, message.IV, aesKey);
+
+        if (!antiReplay.Validate(sensor.Id, payload.MessageId, payload.Timestamp, out var reason))
+            return StatusCode(409, reason);
 
         sensor.LastSeenAt = DateTime.UtcNow;
 

@@ -13,6 +13,7 @@ builder.Services.AddDbContext<ScadaDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<INotificationService, StubNotificationService>();
+builder.Services.AddSingleton<AntiReplayService>();
 
 var app = builder.Build();
 
