@@ -25,14 +25,30 @@ var publicKeyPem = rsa.ExportRSAPublicKeyPem();
 await RegisterSensor();
 
 Console.WriteLine($"Sensor '{sensorConfig.Name}' started. Sending data to {serverUrl}");
+Console.WriteLine("Press ENTER to simulate replay attack (resend last message).");
+
+double lastValue = 0;
+long lastMessageId = 0;
+
+_ = Task.Run(async () =>
+{
+    while (true)
+    {
+        Console.ReadLine();
+        Console.WriteLine($"[REPLAY ATTACK] Resending MessageId={lastMessageId}...");
+        await SendReading(lastValue, replayMessageId: lastMessageId);
+    }
+});
 
 while (true)
 {
     var value = Math.Round(random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange) + sensorConfig.MinRange, 2);
     var priority = CalculatePriority(value);
 
+    lastValue = value;
     PrintReading(value, priority);
     await SendReading(value);
+    lastMessageId = messageId;
 
     var delay = random.Next(1000, 10001);
     await Task.Delay(delay);
@@ -58,13 +74,13 @@ async Task RegisterSensor()
     Console.WriteLine("Registered with server.");
 }
 
-async Task SendReading(double value)
+async Task SendReading(double value, long? replayMessageId = null)
 {
     var innerPayload = new SensorReadingPayload
     {
         Value = value,
         Timestamp = DateTime.UtcNow,
-        MessageId = ++messageId
+        MessageId = replayMessageId ?? ++messageId
     };
 
     var (cipherText, iv) = CryptoService.AesEncrypt(innerPayload, aesKey);
