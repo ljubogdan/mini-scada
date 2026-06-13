@@ -12,9 +12,15 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<ScadaDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddScoped<INotificationService, StubNotificationService>();
 builder.Services.AddSingleton<AntiReplayService>();
 builder.Services.AddHostedService<SensorMonitorService>();
+
+builder.Services.AddHttpClient<INotificationService, NotificationServiceClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["NotificationService:baseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
 
 var app = builder.Build();
 
