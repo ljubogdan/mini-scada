@@ -1,3 +1,4 @@
+using AspNetCoreRateLimit;
 using IngestionService.Interfaces;
 using IngestionService.Services;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddDbContext<ScadaDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -21,6 +23,13 @@ builder.Services.AddHttpClient<INotificationService, NotificationServiceClient>(
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
+// RATE LIMITING
+builder.Services.Configure<IpRateLimitOptions>(
+    builder.Configuration.GetSection("IpRateLimiting")
+);
+builder.Services.AddInMemoryRateLimiting();
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+builder.Services.AddSingleton<SensorRateLimitService>();
 
 var app = builder.Build();
 
@@ -29,6 +38,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// RATE LIMITING
+app.UseIpRateLimiting();
 
 app.MapControllers();
 

@@ -11,7 +11,7 @@ namespace IngestionService.Controllers;
 
 [ApiController]
 [Route("api/ingest")]
-public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config, AntiReplayService antiReplay) : ControllerBase
+public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config, AntiReplayService antiReplay, SensorRateLimitService rateLimiter) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Ingest([FromBody] SecureMessageDto message)
@@ -19,9 +19,20 @@ public class IngestController(ScadaDbContext db, INotificationService notificati
         var sensor = await db.Sensors.FindAsync(message.SensorId);
         if (sensor is null)
             return NotFound("Sensor not found.");
-
+        
         if (sensor.IsBlocked)
             return StatusCode(403, "Sensor is blocked.");
+
+        if (rateLimiter.Exceeded(sensor.Id))
+        {
+            sensor.IsBlocked = true;
+            sensor.BlockedUntil = DateTime.UtcNow.AddSeconds(30);
+            await db.SaveChangesAsync();
+
+            logger.LogWarning("Sensor {SensorId} blocked due to rate limit.", sensor.Id);
+
+            return StatusCode(429, "Sensor exceeded 10 messages per second.");
+        }
 
         if (string.IsNullOrEmpty(sensor.PublicKey))
             return BadRequest("Sensor has no public key.");
