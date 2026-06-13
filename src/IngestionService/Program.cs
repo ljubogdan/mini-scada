@@ -14,6 +14,7 @@ builder.Services.AddDbContext<ScadaDbContext>(options =>
 
 builder.Services.AddScoped<INotificationService, StubNotificationService>();
 builder.Services.AddSingleton<AntiReplayService>();
+builder.Services.AddHostedService<SensorMonitorService>();
 
 var app = builder.Build();
 

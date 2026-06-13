@@ -41,6 +41,21 @@ public class SensorsController(ScadaDbContext db) : ControllerBase
 
         return Ok(sensor.Id);
     }
+
+    [HttpPost("{id}/block")]
+    public async Task<IActionResult> Block(Guid id)
+    {
+        var sensor = await db.Sensors.FindAsync(id);
+        if (sensor is null)
+            return NotFound();
+
+        sensor.IsBlocked = true;
+        sensor.IsActive = false;
+        sensor.BlockedUntil = DateTime.UtcNow.AddSeconds(30);
+        await db.SaveChangesAsync();
+
+        return Ok($"Sensor {sensor.Name} blocked for 30 seconds.");
+    }
 }
 
 public class RegisterSensorDto
