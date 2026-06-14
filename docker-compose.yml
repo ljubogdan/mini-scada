@@ -39,3 +39,15 @@ services:
       POSTGRES_PASSWORD: scada123
     ports:
       - "5432:5432"
+  
+  api-gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateway/Dockerfile
+    ports:
+      - "5000:8080"
+    depends_on:
+      - ingestion-service
+      - notification-service
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
