@@ -19,7 +19,12 @@ public class NotificationsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> ReceiveAlarm([FromBody] AlarmNotificationDto dto)
     {
-        await _hub.Clients.All.SendAsync("AlarmReceived", dto);
+        await _hub.Clients.All.SendAsync(
+            "AlarmReceived",
+             dto.SensorId,
+             dto.Value,
+             dto.Priority
+        );
 
         return Ok();
     }
