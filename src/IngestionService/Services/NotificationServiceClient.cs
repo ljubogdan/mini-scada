@@ -18,7 +18,7 @@ public class NotificationServiceClient : INotificationService
         {
             SensorId = sensorId,
             Value = value,
-            Priority = priority;
+            Priority = priority,
             Timestamp = DateTime.UtcNow
         };
 
