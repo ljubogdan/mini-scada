@@ -120,7 +120,7 @@ curl -X POST http://localhost:5000/api/sensors/00000000-0000-0000-0000-000000000
 
 ## Bezbednosne mere
 
-- **AES-256** enkripcija svaке poruke
+- **AES-256** enkripcija svakе poruke
 - **RSA-2048** digitalni potpis (senzor potpisuje, server verifikuje)
 - **Anti-replay** zaštita - MessageId mora rasti, poruke starije od 30s se odbijaju
 - Tajne (lozinke, ključevi) nisu u repozitorijumu
