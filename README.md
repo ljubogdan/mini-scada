@@ -45,29 +45,35 @@ Ovi fajlovi nisu na GitHub-u
 
 > AES ključ mora biti isti u oba fajla.
 
-### 3. Pokreni PostgreSQL
+### 3. Pokreni sve service (Docker)
 
 ```bash
-sudo docker compose up -d
+sudo docker compose up --build
 ```
 
-### 4. Primeni migracije (kreira tabele u bazi)
+### 4. Primeni migracije (samo prvi put ili kad se promene modeli)
 
 ```bash
-dotnet ef database update --project src/Shared/Shared.csproj --startup-project src/IngestionService/IngestionService.csproj
+  dotnet ef database update \
+  --project src/Shared/Shared.csproj \
+  --startup-project src/IngestionService/IngestionService.csproj
 ```
 
-### 5. Pokreni server
-
-```bash
-dotnet run --project src/IngestionService/IngestionService.csproj
-```
-
-### 6. Pokreni senzor (novi terminal)
+### 5. Pokreni senzor (novi terminal)
 
 ```bash
 dotnet run --project src/SensorClient/SensorClient.csproj
 ```
+
+Ili direktno iz foldera sa projektom:
+
+```
+  dotnet run -- \
+  Sensor:Id=44444444-4444-4444-4444-444444444444 \
+  Sensor:Name=Pera
+```
+
+Na isti način se u komandnoj liniji mogu proslediti svi ostali parametri senzora.
 
 ---
 
@@ -99,7 +105,7 @@ curl -X POST http://localhost:5000/api/sensors/00000000-0000-0000-0000-000000000
 | IngestionService | Završen (Student 1) | Prima podatke od senzora, upisuje u bazu |
 | SensorClient | Završen (Student 1) | Simulira senzore, šalje šifrovane poruke |
 | ConsensusService | Student 2 | BFT konsenzus svaki minut |
-| NotificationService | Student 3 | SignalR alarmi u realnom vremenu |
+| NotificationService | Završen (Student 3) | SignalR alarmi u realnom vremenu |
 
 ---
 
@@ -111,10 +117,7 @@ curl -X POST http://localhost:5000/api/sensors/00000000-0000-0000-0000-000000000
 - Reports API - `/api/reports` za istorijske podatke
 
 **Student 3:**
-- `src/NotificationService/` - implementirati SignalR
-- Zameniti `StubNotificationService` u IngestionService pravom implementacijom
-- Rate limiting (`AspNetCoreRateLimit`)
-- Ingress konfiguracija + Kubernetes manifesti
+- Kubernetes manifesti
 
 ---
 
