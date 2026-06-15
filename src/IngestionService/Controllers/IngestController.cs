@@ -11,67 +11,126 @@ namespace IngestionService.Controllers;
 
 [ApiController]
 [Route("api/ingest")]
-public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config, AntiReplayService antiReplay) : ControllerBase
+public class IngestController(ScadaDbContext db, INotificationService notifications, ILogger<IngestController> logger, IConfiguration config, AntiReplayService antiReplay, SensorRateLimitService rateLimiter) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Ingest([FromBody] SecureMessageDto message)
     {
-        var sensor = await db.Sensors.FindAsync(message.SensorId);
-        if (sensor is null)
-            return NotFound("Sensor not found.");
-
-        if (sensor.IsBlocked)
-            return StatusCode(403, "Sensor is blocked.");
-
-        if (string.IsNullOrEmpty(sensor.PublicKey))
-            return BadRequest("Sensor has no public key.");
-
-        var isValid = CryptoService.RsaVerify(message.EncryptedPayload, message.Signature, sensor.PublicKey);
-        if (!isValid)
-            return StatusCode(401, "Invalid signature.");
-
-        var aesKey = Convert.FromBase64String(config["AesKey"]!);
-        var payload = CryptoService.AesDecrypt<SensorReadingPayload>(message.EncryptedPayload, message.IV, aesKey);
-
-        if (!antiReplay.Validate(sensor.Id, payload.MessageId, payload.Timestamp, out var reason))
-            return StatusCode(409, reason);
-
-        sensor.LastSeenAt = DateTime.UtcNow;
-
-        var priority = CalculateAlarmPriority(sensor, payload.Value);
-
-        var measurement = new Measurement
+        try
         {
-            Id = Guid.NewGuid(),
-            SensorId = sensor.Id,
-            Value = payload.Value,
-            Timestamp = payload.Timestamp,
-            Quality = sensor.Quality,
-            AlarmPriority = priority,
-            IsConsensus = false
-        };
+            var sensor = await db.Sensors.FindAsync(message.SensorId);
+            if (sensor is null)
+            {
+                logger.LogWarning("Sensor not found: {SensorId}", message.SensorId);
+                return NotFound("Sensor not found.");
+            }
 
-        db.Measurements.Add(measurement);
+            if (sensor.IsBlocked)
+            {
+                logger.LogWarning("Blocked sensor attempted request: {SensorId}", sensor.Id);
+                return StatusCode(403, "Sensor is blocked.");
+            }
 
-        if (priority > 0)
-        {
-            db.AlarmEvents.Add(new AlarmEvent
+            if (rateLimiter.Exceeded(sensor.Id))
+            {
+                sensor.IsBlocked = true;
+                sensor.BlockedUntil = DateTime.UtcNow.AddSeconds(30);
+                await db.SaveChangesAsync();
+
+                logger.LogWarning("RATE LIMIT: Sensor {SensorId} blocked for 30s", sensor.Id);
+                return StatusCode(429, "Sensor exceeded rate limit.");
+            }
+
+            if (string.IsNullOrEmpty(sensor.PublicKey))
+            {
+                logger.LogError("Sensor {SensorId} missing public key", sensor.Id);
+                return BadRequest("Sensor has no public key.");
+            }
+
+            var isValid = CryptoService.RsaVerify(message.EncryptedPayload, message.Signature, sensor.PublicKey);
+            if (!isValid)
+            {
+                logger.LogWarning("INVALID SIGNATURE from sensor {SensorId}", sensor.Id);
+                return StatusCode(401, "Invalid signature.");
+            }
+
+            var aesKeyString = config["AesKey"];
+
+            if (string.IsNullOrEmpty(aesKeyString))
+            {
+                logger.LogCritical("AES key is missing in configuration!");
+                return StatusCode(500, "Server misconfigured.");
+            }
+
+            var aesKey = Convert.FromBase64String(aesKeyString);
+
+            logger.LogDebug("AES key length = {Length}", aesKey.Length);
+
+            SensorReadingPayload payload;
+
+            try
+            {
+                payload = CryptoService.AesDecrypt<SensorReadingPayload>(
+                    message.EncryptedPayload,
+                    message.IV,
+                    aesKey);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "AES decryption failed for sensor {SensorId}", sensor.Id);
+                return StatusCode(500, "Decryption failed.");
+            }
+
+            if (!antiReplay.Validate(sensor.Id, payload.MessageId, payload.Timestamp, out var reason))
+            {
+                logger.LogWarning("Replay attack detected: {Reason} Sensor={SensorId}", reason, sensor.Id);
+                return StatusCode(409, reason);
+            }
+
+            sensor.LastSeenAt = DateTime.UtcNow;
+
+            var priority = CalculateAlarmPriority(sensor, payload.Value);
+
+            var measurement = new Measurement
             {
                 Id = Guid.NewGuid(),
                 SensorId = sensor.Id,
                 Value = payload.Value,
-                Priority = priority,
-                Timestamp = payload.Timestamp
-            });
+                Timestamp = payload.Timestamp,
+                Quality = sensor.Quality,
+                AlarmPriority = priority,
+                IsConsensus = false
+            };
 
-            await notifications.SendAlarmAsync(sensor.Id, payload.Value, priority);
+            db.Measurements.Add(measurement);
+
+            if (priority > 0)
+            {
+                db.AlarmEvents.Add(new AlarmEvent
+                {
+                    Id = Guid.NewGuid(),
+                    SensorId = sensor.Id,
+                    Value = payload.Value,
+                    Priority = priority,
+                    Timestamp = payload.Timestamp
+                });
+
+                await notifications.SendAlarmAsync(sensor.Id, payload.Value, priority);
+            }
+
+            await db.SaveChangesAsync();
+
+            logger.LogInformation(
+                "OK Sensor={SensorId} Value={Value} Priority={Priority}",
+                sensor.Id, payload.Value, priority);
+
+            return Ok();
         }
-
-        await db.SaveChangesAsync();
-
-        logger.LogInformation("Sensor={SensorId} Value={Value} Priority={Priority}", sensor.Id, payload.Value, priority);
-
-        return Ok();
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled error in Ingest endpoint");
+            return StatusCode(500, "Internal server error");
+        }
     }
 
     private static int CalculateAlarmPriority(Sensor sensor, double value)
