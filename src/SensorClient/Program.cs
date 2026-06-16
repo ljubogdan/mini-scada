@@ -20,6 +20,9 @@ var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
 var random = new Random();
 long messageId = 0;
 
+bool isActive = true;
+CancellationTokenSource? sendingCts = new CancellationTokenSource();
+
 using var rsa = RSA.Create(2048);
 var publicKeyPem = rsa.ExportRSAPublicKeyPem();
 
@@ -41,18 +44,60 @@ _ = Task.Run(async () =>
     }
 });
 
-while (true)
+_ = Task.Run(async () =>
 {
-    var value = Math.Round(random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange) + sensorConfig.MinRange, 2);
-    var priority = CalculatePriority(value);
+    while (true)
+    {
+        await Task.Delay(10000);
+        var newIsActive = await SendHeartbeat();
+        if (newIsActive != isActive)
+        {
+            isActive = newIsActive;
+            if (isActive)
+            {
+                sendingCts = new CancellationTokenSource();
+                _ = Task.Run(() => SendingLoop(sendingCts.Token));
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | ACTIVE - resumed sending.");
+            }
+            else
+            {
+                sendingCts?.Cancel();
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | INACTIVE - waiting for activation...");
+                Console.ResetColor();
+            }
+        }
+    }
+});
 
-    lastValue = value;
-    PrintReading(value, priority);
-    await SendReading(value);
-    lastMessageId = messageId;
+_ = Task.Run(() => SendingLoop(sendingCts.Token));
 
-    var delay = random.Next(1000, 10001);
-    await Task.Delay(delay);
+await Task.Delay(-1);
+
+async Task SendingLoop(CancellationToken token)
+{
+    try
+    {
+        while (!token.IsCancellationRequested)
+        {
+            var value = Math.Round(
+                random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange)
+                + sensorConfig.MinRange, 2);
+            var priority = CalculatePriority(value);
+
+            lastValue = value;
+            PrintReading(value, priority);
+            await SendReading(value, cancellationToken: token);
+            lastMessageId = messageId;
+
+            var delay = random.Next(1000, 10001);
+            await Task.Delay(delay, token);
+        }
+    }
+    catch (TaskCanceledException)
+    {
+        // Expected cancellation
+    }
 }
 
 async Task RegisterSensor()
@@ -75,7 +120,7 @@ async Task RegisterSensor()
     Console.WriteLine("Registered with server.");
 }
 
-async Task SendReading(double value, long? replayMessageId = null)
+async Task SendReading(double value, long? replayMessageId = null, System.Threading.CancellationToken cancellationToken = default)
 {
     var innerPayload = new SensorReadingPayload
     {
@@ -97,9 +142,13 @@ async Task SendReading(double value, long? replayMessageId = null)
 
     try
     {
-        var response = await http.PostAsJsonAsync("/api/ingest", message);
+        var response = await http.PostAsJsonAsync("/api/ingest", message, cancellationToken);
         if (!response.IsSuccessStatusCode)
             Console.WriteLine($"Server returned: {response.StatusCode}");
+    }
+    catch (TaskCanceledException)
+    {
+        throw;
     }
     catch (Exception ex)
     {
@@ -127,4 +176,23 @@ void PrintReading(double value, int priority)
     };
     Console.WriteLine($"[{timestamp}] {sensorConfig.Name} | Temp: {value}°C | Alarm: {(priority == 0 ? "None" : $"P{priority}")}");
     Console.ResetColor();
+}
+
+async Task<bool> SendHeartbeat()
+{
+    try
+    {
+        var response = await http.PostAsJsonAsync("/api/heartbeat", new { sensorConfig.Id });
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<HeartbeatResponseDto>();
+            return result?.IsActive ?? true;
+        }
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Heartbeat failed: {ex.Message}");
+        return true;
+    }
 }

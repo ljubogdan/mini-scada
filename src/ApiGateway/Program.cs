@@ -23,6 +23,18 @@ builder.Services.AddReverseProxy()
                 RouteId = "alarms",
                 ClusterId = "notification",
                 Match = new RouteMatch { Path = "/api/alarms/{**catch-all}" }
+            },
+            new RouteConfig
+            {
+                RouteId = "reports",
+                ClusterId = "ingestion",
+                Match = new RouteMatch { Path = "/api/reports/{**catch-all}" }
+            },
+            new RouteConfig
+            {
+                RouteId = "heartbeat",
+                ClusterId = "ingestion",
+                Match = new RouteMatch { Path = "/api/heartbeat/{**catch-all}" }
             }
         },
         new[]

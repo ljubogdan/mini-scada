@@ -8,4 +8,6 @@ public class ScadaDbContext(DbContextOptions<ScadaDbContext> options) : DbContex
     public DbSet<Sensor> Sensors => Set<Sensor>();
     public DbSet<Measurement> Measurements => Set<Measurement>();
     public DbSet<AlarmEvent> AlarmEvents => Set<AlarmEvent>();
+    public DbSet<Consensus> Consensuses => Set<Consensus>();
+    public DbSet<Heartbeat> Heartbeats => Set<Heartbeat>();
 }

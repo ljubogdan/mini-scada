@@ -42,11 +42,6 @@ public class SensorMonitorService(IServiceScopeFactory scopeFactory, ILogger<Sen
                     sensor.IsActive = false;
                     logger.LogWarning("Sensor {Name} marked inactive (no message for 10s).", sensor.Name);
                 }
-                else if (!inactive && !sensor.IsActive)
-                {
-                    sensor.IsActive = true;
-                    logger.LogInformation("Sensor {Name} is active again.", sensor.Name);
-                }
             }
         }
 
