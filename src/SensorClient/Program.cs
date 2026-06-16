@@ -47,7 +47,7 @@ _ = Task.Run(async () =>
 {
     while (true)
     {
-        await Task.Delay(10000); // svakih 10s
+        await Task.Delay(10000);
         isActive = await SendHeartbeat();
     }
 });

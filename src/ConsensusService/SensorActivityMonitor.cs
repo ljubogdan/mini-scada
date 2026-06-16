@@ -62,18 +62,12 @@ namespace ConsensusService
         private async Task ActivateFallbackSensorAsync(ScadaDbContext dbContext, CancellationToken stoppingToken)
         {
             var tenSecondsAgo = DateTime.UtcNow.AddSeconds(-10);
-            
-            var recentHeartbeatSensorIds = await dbContext.Heartbeats
-                .Where(h => h.Timestamp >= tenSecondsAgo)
-                .Select(h => h.SensorId)
-                .Distinct()
-                .ToListAsync(stoppingToken);
-
-            if (recentHeartbeatSensorIds.Count == 0) return;
 
             var sensors = await dbContext.Sensors
-                .Where(s => recentHeartbeatSensorIds.Contains(s.Id))
+                .Where(s => s.LastSeenAt != null && s.LastSeenAt >= tenSecondsAgo)
                 .ToListAsync(stoppingToken);
+
+            if (sensors.Count == 0) return;
 
             UnblockExpiredSensors(sensors);
 
