@@ -12,12 +12,12 @@ using Shared.Models;
 
 namespace ConsensusService
 {
-    internal class SensorActivityMonitor : BackgroundService
+    internal class ActiveSensorsMaintainer : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
-        private readonly ILogger<SensorActivityMonitor> _logger;
+        private readonly ILogger<ActiveSensorsMaintainer> _logger;
 
-        public SensorActivityMonitor(IServiceProvider serviceProvider, ILogger<SensorActivityMonitor> logger)
+        public ActiveSensorsMaintainer(IServiceProvider serviceProvider, ILogger<ActiveSensorsMaintainer> logger)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;

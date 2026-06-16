@@ -21,6 +21,7 @@ var random = new Random();
 long messageId = 0;
 
 bool isActive = true;
+CancellationTokenSource? sendingCts = new CancellationTokenSource();
 
 using var rsa = RSA.Create(2048);
 var publicKeyPem = rsa.ExportRSAPublicKeyPem();
@@ -48,33 +49,55 @@ _ = Task.Run(async () =>
     while (true)
     {
         await Task.Delay(10000);
-        isActive = await SendHeartbeat();
+        var newIsActive = await SendHeartbeat();
+        if (newIsActive != isActive)
+        {
+            isActive = newIsActive;
+            if (isActive)
+            {
+                sendingCts = new CancellationTokenSource();
+                _ = Task.Run(() => SendingLoop(sendingCts.Token));
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | ACTIVE - resumed sending.");
+            }
+            else
+            {
+                sendingCts?.Cancel();
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | INACTIVE - waiting for activation...");
+                Console.ResetColor();
+            }
+        }
     }
 });
 
-while (true)
+_ = Task.Run(() => SendingLoop(sendingCts.Token));
+
+await Task.Delay(-1);
+
+async Task SendingLoop(CancellationToken token)
 {
-    if (isActive)
+    try
     {
-        var value = Math.Round(
-            random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange)
-            + sensorConfig.MinRange, 2);
-        var priority = CalculatePriority(value);
+        while (!token.IsCancellationRequested)
+        {
+            var value = Math.Round(
+                random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange)
+                + sensorConfig.MinRange, 2);
+            var priority = CalculatePriority(value);
 
-        lastValue = value;
-        PrintReading(value, priority);
-        await SendReading(value);
-        lastMessageId = messageId;
+            lastValue = value;
+            PrintReading(value, priority);
+            await SendReading(value, cancellationToken: token);
+            lastMessageId = messageId;
+
+            var delay = random.Next(1000, 10001);
+            await Task.Delay(delay, token);
+        }
     }
-    else
+    catch (TaskCanceledException)
     {
-        Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | INACTIVE - waiting for activation...");
-        Console.ResetColor();
+        // Expected cancellation
     }
-
-    var delay = random.Next(1000, 10001);
-    await Task.Delay(delay);
 }
 
 async Task RegisterSensor()
@@ -97,7 +120,7 @@ async Task RegisterSensor()
     Console.WriteLine("Registered with server.");
 }
 
-async Task SendReading(double value, long? replayMessageId = null)
+async Task SendReading(double value, long? replayMessageId = null, System.Threading.CancellationToken cancellationToken = default)
 {
     var innerPayload = new SensorReadingPayload
     {
@@ -119,9 +142,13 @@ async Task SendReading(double value, long? replayMessageId = null)
 
     try
     {
-        var response = await http.PostAsJsonAsync("/api/ingest", message);
+        var response = await http.PostAsJsonAsync("/api/ingest", message, cancellationToken);
         if (!response.IsSuccessStatusCode)
             Console.WriteLine($"Server returned: {response.StatusCode}");
+    }
+    catch (TaskCanceledException)
+    {
+        throw;
     }
     catch (Exception ex)
     {
