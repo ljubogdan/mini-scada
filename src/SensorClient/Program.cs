@@ -182,7 +182,10 @@ async Task<bool> SendHeartbeat()
 {
     try
     {
-        var response = await http.PostAsJsonAsync("/api/heartbeat", new { sensorConfig.Id });
+        var response = await http.PostAsJsonAsync("/api/heartbeat", new HeartbeatDto
+        {
+            SensorId = sensorConfig.Id
+        });
         if (response.IsSuccessStatusCode)
         {
             var result = await response.Content.ReadFromJsonAsync<HeartbeatResponseDto>();
