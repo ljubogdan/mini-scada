@@ -9,6 +9,7 @@ using Shared.Security;
 var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json")
     .AddJsonFile("appsettings.Development.json", optional: true)
+    .AddCommandLine(args)
     .Build();
 
 var serverUrl = config["ServerUrl"]!;
