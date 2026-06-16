@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 
 namespace ConsensusService;
 
-public class Worker : BackgroundService
+public class ConsensusService : BackgroundService
 {
-    private readonly ILogger<Worker> _logger;
+    private readonly ILogger<ConsensusService> _logger;
     private readonly IServiceProvider _serviceProvider;
 
-    public Worker(ILogger<Worker> logger, IServiceProvider serviceProvider)
+    public ConsensusService(ILogger<ConsensusService> logger, IServiceProvider serviceProvider)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

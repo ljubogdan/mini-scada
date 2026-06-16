@@ -20,6 +20,8 @@ var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
 var random = new Random();
 long messageId = 0;
 
+bool isActive = true;
+
 using var rsa = RSA.Create(2048);
 var publicKeyPem = rsa.ExportRSAPublicKeyPem();
 
@@ -41,15 +43,35 @@ _ = Task.Run(async () =>
     }
 });
 
+_ = Task.Run(async () =>
+{
+    while (true)
+    {
+        await Task.Delay(10000); // svakih 10s
+        isActive = await SendHeartbeat();
+    }
+});
+
 while (true)
 {
-    var value = Math.Round(random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange) + sensorConfig.MinRange, 2);
-    var priority = CalculatePriority(value);
+    if (isActive)
+    {
+        var value = Math.Round(
+            random.NextDouble() * (sensorConfig.MaxRange - sensorConfig.MinRange)
+            + sensorConfig.MinRange, 2);
+        var priority = CalculatePriority(value);
 
-    lastValue = value;
-    PrintReading(value, priority);
-    await SendReading(value);
-    lastMessageId = messageId;
+        lastValue = value;
+        PrintReading(value, priority);
+        await SendReading(value);
+        lastMessageId = messageId;
+    }
+    else
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | INACTIVE - waiting for activation...");
+        Console.ResetColor();
+    }
 
     var delay = random.Next(1000, 10001);
     await Task.Delay(delay);
@@ -127,4 +149,23 @@ void PrintReading(double value, int priority)
     };
     Console.WriteLine($"[{timestamp}] {sensorConfig.Name} | Temp: {value}°C | Alarm: {(priority == 0 ? "None" : $"P{priority}")}");
     Console.ResetColor();
+}
+
+async Task<bool> SendHeartbeat()
+{
+    try
+    {
+        var response = await http.PostAsJsonAsync("/api/heartbeat", new { sensorConfig.Id });
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<HeartbeatResponseDto>();
+            return result?.IsActive ?? true;
+        }
+        return true;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Heartbeat failed: {ex.Message}");
+        return true;
+    }
 }
