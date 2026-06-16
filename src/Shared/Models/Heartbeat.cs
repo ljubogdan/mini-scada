@@ -11,9 +11,4 @@ public class Heartbeat
     public Sensor? Sensor { get; set; }
 
     public DateTime Timestamp { get; set; }
-
-    public Boolean IsActive { get; set; }
-
-    public DataQuality Quality { get; set; }
-
 }
