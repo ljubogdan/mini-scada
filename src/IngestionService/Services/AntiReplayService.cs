@@ -5,7 +5,7 @@ namespace IngestionService.Services;
 public class AntiReplayService
 {
     private readonly ConcurrentDictionary<Guid, long> _lastMessageIds = new();
-    private static readonly TimeSpan MaxMessageAge = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaxMessageAge = TimeSpan.FromSeconds(120);
 
     public bool Validate(Guid sensorId, long messageId, DateTime timestamp, out string reason)
     {
