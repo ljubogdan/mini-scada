@@ -30,7 +30,7 @@ public class SensorsController(ScadaDbContext db) : ControllerBase
             AlarmThreshold1 = dto.AlarmThreshold1,
             AlarmThreshold2 = dto.AlarmThreshold2,
             AlarmThreshold3 = dto.AlarmThreshold3,
-            IsActive = true,
+            IsActive = false,
             IsBlocked = false,
             LastSeenAt = DateTime.UtcNow,
             PublicKey = dto.PublicKey
