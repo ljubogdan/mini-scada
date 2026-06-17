@@ -48,7 +48,6 @@ public class SensorMonitorService(IServiceScopeFactory scopeFactory, ILogger<Sen
         await db.SaveChangesAsync();
 
         var activeCount = sensors.Count(s => s.IsActive && !s.IsBlocked);
-        if (activeCount < 5)
-            logger.LogWarning("Active sensor count is {Count}/5.", activeCount);
+        logger.LogWarning("Active sensor count is {Count}/5.", activeCount);
     }
 }

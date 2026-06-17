@@ -20,7 +20,7 @@ var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
 var random = new Random();
 long messageId = 0;
 
-bool isActive = true;
+bool isActive = false;
 CancellationTokenSource? sendingCts = new CancellationTokenSource();
 
 using var rsa = RSA.Create(2048);

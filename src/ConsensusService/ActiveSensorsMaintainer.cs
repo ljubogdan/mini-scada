@@ -46,10 +46,11 @@ namespace ConsensusService
             var dbContext = scope.ServiceProvider.GetRequiredService<ScadaDbContext>();
 
             int activeSensorCount = await GetActiveSensorCountAsync(dbContext, stoppingToken);
+            int deficit = 5 - activeSensorCount;
 
-            if (activeSensorCount < 5)
+            if (deficit > 0)
             {
-                await ActivateFallbackSensorAsync(dbContext, stoppingToken);
+                await ActivateFallbackSensorsAsync(dbContext, deficit, stoppingToken);
             }
         }
 
@@ -59,7 +60,7 @@ namespace ConsensusService
                 .CountAsync(s => s.IsActive && !s.IsBlocked && (s.BlockedUntil == null || s.BlockedUntil < DateTime.UtcNow), stoppingToken);
         }
 
-        private async Task ActivateFallbackSensorAsync(ScadaDbContext dbContext, CancellationToken stoppingToken)
+        private async Task ActivateFallbackSensorsAsync(ScadaDbContext dbContext, int deficit, CancellationToken stoppingToken)
         {
             var tenSecondsAgo = DateTime.UtcNow.AddSeconds(-10);
 
@@ -77,7 +78,7 @@ namespace ConsensusService
 
             if (candidateSensors.Count > 0)
             {
-                ActivateSensor(candidateSensors);
+                ActivateSensors(candidateSensors, deficit);
                 await dbContext.SaveChangesAsync(stoppingToken);
             }
         }
@@ -94,18 +95,26 @@ namespace ConsensusService
             }
         }
 
-        private void ActivateSensor(List<Sensor> candidateSensors)
+        private void ActivateSensors(List<Sensor> candidateSensors, int deficit)
         {
-            var selectedSensor = candidateSensors.FirstOrDefault(s => s.Quality == DataQuality.Good);
-            
-            if (selectedSensor == null)
-            {
-                var random = new Random();
-                selectedSensor = candidateSensors[random.Next(candidateSensors.Count)];
-            }
+            var goodSensors = candidateSensors
+                .Where(s => s.Quality == DataQuality.Good)
+                .ToList();
 
-            selectedSensor.IsActive = true;
-            _logger.LogInformation("Activated sensor {SensorId} to maintain minimum active count.", selectedSensor.Id);
+            var otherSensors = candidateSensors
+                .Except(goodSensors)
+                .OrderBy(_ => Random.Shared.Next())
+                .ToList();
+
+            var toActivate = goodSensors
+                .Concat(otherSensors)
+                .Take(deficit);
+
+            foreach (var sensor in toActivate)
+            {
+                sensor.IsActive = true;
+                _logger.LogInformation("Activated sensor {SensorId} to maintain minimum active count.", sensor.Id);
+            }
         }
     }
 }
