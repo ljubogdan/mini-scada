@@ -18,10 +18,10 @@ var sensorConfig = config.GetSection("Sensor").Get<SensorConfig>()!;
 
 var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
 var random = new Random();
-long messageId = 0;
+long messageId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-bool isActive = true;
-CancellationTokenSource? sendingCts = new CancellationTokenSource();
+bool isActive = false;
+CancellationTokenSource? sendingCts = null;
 
 using var rsa = RSA.Create(2048);
 var publicKeyPem = rsa.ExportRSAPublicKeyPem();
@@ -48,8 +48,9 @@ _ = Task.Run(async () =>
 {
     while (true)
     {
-        await Task.Delay(10000);
         var newIsActive = await SendHeartbeat();
+        Console.WriteLine($"[Heartbeat] isActive={isActive}, newIsActive={newIsActive}");
+
         if (newIsActive != isActive)
         {
             isActive = newIsActive;
@@ -62,15 +63,16 @@ _ = Task.Run(async () =>
             else
             {
                 sendingCts?.Cancel();
+                sendingCts = null;
                 Console.ForegroundColor = ConsoleColor.DarkGray;
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {sensorConfig.Name} | INACTIVE - waiting for activation...");
                 Console.ResetColor();
             }
         }
+
+        await Task.Delay(10000);
     }
 });
-
-_ = Task.Run(() => SendingLoop(sendingCts.Token));
 
 await Task.Delay(-1);
 
@@ -189,13 +191,13 @@ async Task<bool> SendHeartbeat()
         if (response.IsSuccessStatusCode)
         {
             var result = await response.Content.ReadFromJsonAsync<HeartbeatResponseDto>();
-            return result?.IsActive ?? true;
+            return result?.IsActive ?? false;
         }
-        return true;
+        return false;
     }
     catch (Exception ex)
     {
         Console.WriteLine($"Heartbeat failed: {ex.Message}");
-        return true;
+        return false;
     }
 }
